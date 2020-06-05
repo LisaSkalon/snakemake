@@ -32,7 +32,10 @@ rule all:
         "qc/multiqc.html",
         expand('indexes/{genome}/{genome}.fa.gz', genome=GENOME),
         expand("bams/{sample}_{genome}.bam", sample = SAMPLES, genome = GENOME),
-        "qc/multiqc/bams.html"
+        "qc/multiqc/bams.html",
+        expand("bams/sorted/{sample}_{genome}.sorted.bam", sample = SAMPLES, genome = GENOME),
+        expand("bams/sorted/{sample}_{genome}.bam.bai", sample = SAMPLES, genome = GENOME),
+        expand("bigwig/{sample}_{genome}.bw", sample = SAMPLES, genome = GENOME)
 
 rule fastqc:
     input:
@@ -98,8 +101,42 @@ rule multiqc_bams:
     output:
         "qc/multiqc/bams.html"
    #! set environment conda:
-
     shell:
-        """multiqc -n {output} {input}"""
+        """multiqc --force -n {output} {input}"""
 
+rule samtools_sort:
+    input:
+         "bams/{sample}_{genome}.bam"
+    output:
+         "bams/sorted/{sample}_{genome}.sorted.bam"
+    params:
+        ""
+    threads:  # Samtools takes additional threads through its option -@
+        4     # This value - 1 will be sent to -@.
+    wrapper:
+        "0.60.0/bio/samtools/sort"
 
+rule samtools_index:
+    input:
+        "bams/sorted/{sample}_{genome}.sorted.bam"
+    output:
+        "bams/sorted/{sample}_{genome}.sorted.bam.bai"
+    params:
+        "" # optional params string
+    wrapper:
+        "0.60.0/bio/samtools/index"
+
+rule bigWig:
+    input:
+        sorted = "bams/sorted/{sample}_{genome}.sorted.bam",
+        index ="bams/sorted/{sample}_{genome}.sorted.bam.bai"
+    output:
+        "bigwig/{sample}_{genome}.bw"
+    shell:
+        """
+        bamCoverage \
+        --bam {sorted} \
+        --outFileName {output} \
+        --binSize 1 \
+        --outFileFormat bigwig \
+        """
