@@ -21,6 +21,9 @@ def zip_gen(wildcards):
 def multi_gen(wildcards):
     return ['qc/fastqc/{}_fastqc.zip'.format(i) for i in config['paths'].keys()]
 
+
+ruleorder: bowtie2 > multiqc_bams
+
 rule all:
     input:
         html_gen,
@@ -28,7 +31,8 @@ rule all:
         log_gen,
         "qc/multiqc.html",
         expand('indexes/{genome}/{genome}.fa.gz', genome=GENOME),
-        expand("bams/{sample}_{genome}.bam", sample = SAMPLES, genome = GENOME)
+        expand("bams/{sample}_{genome}.bam", sample = SAMPLES, genome = GENOME),
+        "qc/multiqc/bams.html"
 
 rule fastqc:
     input:
@@ -87,3 +91,15 @@ rule bowtie2:
     threads: 4  # Use at least two threads
     wrapper:
         "0.60.0/bio/bowtie2/align"
+
+rule multiqc_bams:
+    input:
+        "logs/bowtie2/"
+    output:
+        "qc/multiqc/bams.html"
+   #! set environment conda:
+
+    shell:
+        """multiqc -n {output} {input}"""
+
+
