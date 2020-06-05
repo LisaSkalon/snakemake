@@ -5,9 +5,10 @@ SAMPLES_INFO['Sample'] = SAMPLES_INFO.apply(lambda row: row.GSM+'_'+row.Cell+'_'
 SAMPLES_INFO.set_index(['Sample'], inplace=True)
 
 SAMPLES = SAMPLES_INFO.index.values.tolist()
-#PATH = SAMPLES_INFO['File'].tolist()
 
-config = dict(paths = dict(zip(SAMPLES_INFO.index.values,SAMPLES_INFO.File)))
+config = dict(
+    paths = dict(zip(SAMPLES_INFO.index.values,SAMPLES_INFO.File)),
+    genome = ['chr15'] )
 
 def html_gen(wildcards):
     return ["qc/fastqc/{}.html".format(i) for i in config['paths'].keys()]
@@ -17,15 +18,16 @@ def zip_gen(wildcards):
     return ["qc/fastqc/{}_fastqc.zip".format(i) for i in config['paths'].keys()]
 def multi_gen(wildcards):
     return ['qc/fastqc/{}_fastqc.zip'.format(i) for i in config['paths'].keys()]
-
-#SAMPLES, = glob_wildcards(SAMPLES_INFO.loc[{sample}, 'File'])
+def wget_gen(wildcards):
+    return ['indexes/{}/{}.fa.gz'.format(i, i) for i in config['genome']]
 
 rule all:
     input:
         html_gen,
         zip_gen,
         log_gen,
-        "qc/multiqc.html"
+        "qc/multiqc.html",
+        wget_gen
 
 rule fastqc:
     input:
@@ -43,7 +45,7 @@ rule fastqc:
 
 rule multiqc:
     input:
-        "qc/fastqc/."
+        multi_gen
     output:
         "qc/multiqc.html"
     params:
@@ -52,3 +54,10 @@ rule multiqc:
         "logs/multiqc.log"
     wrapper:
         "0.59.2/bio/multiqc"
+
+rule wget:
+    output:
+        'indexes/{genome}/{genome}.fa.gz'
+    shell:
+       # """wget http://hgdownload.soe.ucsc.edu/goldenPath/{wildcards.genome}/bigZips/{wildcards.genome}.fa.gz"""
+       """wget http://hgdownload.cse.ucsc.edu/goldenPath/hg19/chromosomes/{wildcards.genome}.fa.gz -O {output}"""
