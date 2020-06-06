@@ -1,0 +1,2 @@
+# UCSC genome: e.g. hg19, hg38, mm9, mm10, .. If choosing full genome, uncomment line and comment line 
+genome: chr15

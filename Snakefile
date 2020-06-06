@@ -1,19 +1,16 @@
 import pandas as pd
 
+configfile: "config.yaml"
+
 SAMPLES_INFO = pd.read_csv("./data_table.tsv", sep = '\t')
 SAMPLES_INFO['Sample'] = SAMPLES_INFO.apply(lambda row: row.GSM+'_'+row.Cell+'_'+row.Target, axis=1)
 SAMPLES_INFO.set_index(['Sample'], inplace=True)
 
 SAMPLES = SAMPLES_INFO.index.values.tolist()
-
-config = dict(
-    paths = dict(zip(SAMPLES_INFO.index.values,SAMPLES_INFO.File)),
-    genome = ['chr15'] )
-
 GENOME=config["genome"]
 
 def multi_gen(wildcards):
-    return ['qc/fastqc/{}_fastqc.zip'.format(i) for i in config['paths'].keys()]
+    return ['qc/fastqc/{}_fastqc.zip'.format(i) for i in SAMPLES]
 
 rule all:
     input:
@@ -59,8 +56,12 @@ rule wget:
     output:
         'indexes/{genome}/{genome}.fa.gz'
     shell:
-       # """wget http://hgdownload.soe.ucsc.edu/goldenPath/{wildcards.genome}/bigZips/{wildcards.genome}.fa.gz -O {output}""""
-       """wget http://hgdownload.cse.ucsc.edu/goldenPath/hg19/chromosomes/{wildcards.genome}.fa.gz -O {output}"""
+        #!!!! if you want to use full genome (hg19, ...), uncomment line below !!!!
+       #"""wget http://hgdownload.soe.ucsc.edu/goldenPath/{wildcards.genome}/bigZips/{wildcards.genome}.fa.gz \
+       #   -O {output}"""
+       #!!!! if you want to use full genome (hg19, ...), comment line below !!!!
+       """wget http://hgdownload.cse.ucsc.edu/goldenPath/hg19/chromosomes/{wildcards.genome}.fa.gz  \
+       -O {output}"""
 
 rule index_bowtie:
     output:
