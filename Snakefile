@@ -12,30 +12,22 @@ config = dict(
 
 GENOME=config["genome"]
 
-def html_gen(wildcards):
-    return ["qc/fastqc/{}.html".format(i) for i in config['paths'].keys()]
-def log_gen(wildcards):
-    return ["logs/fastqc/{}.log".format(i) for i in config['paths'].keys()]
-def zip_gen(wildcards):
-    return ["qc/fastqc/{}_fastqc.zip".format(i) for i in config['paths'].keys()]
 def multi_gen(wildcards):
     return ['qc/fastqc/{}_fastqc.zip'.format(i) for i in config['paths'].keys()]
 
-
-ruleorder: bowtie2 > multiqc_bams
-
 rule all:
     input:
-        html_gen,
-        zip_gen,
-        log_gen,
-        "qc/multiqc.html",
+        expand("qc/fastqc/{sample}.html", sample = SAMPLES),
+        expand("qc/fastqc/{sample}_fastqc.zip", sample = SAMPLES),
+        expand("logs/fastqc/{sample}.log", sample = SAMPLES),
+        "qc/multiqc/reads.html",
         expand('indexes/{genome}/{genome}.fa.gz', genome=GENOME),
         expand("bams/{sample}_{genome}.bam", sample = SAMPLES, genome = GENOME),
         "qc/multiqc/bams.html",
         expand("bams/sorted/{sample}_{genome}.sorted.bam", sample = SAMPLES, genome = GENOME),
-        expand("bams/sorted/{sample}_{genome}.bam.bai", sample = SAMPLES, genome = GENOME),
-        expand("bigwig/{sample}_{genome}.bw", sample = SAMPLES, genome = GENOME)
+        expand("bams/sorted/{sample}_{genome}.sorted.bam.bai", sample = SAMPLES, genome = GENOME),
+        expand("bigwig/{sample}_{genome}.bw", sample = SAMPLES, genome = GENOME),
+        expand('chip-seq_{genome}.tar.gz', genome = GENOME)
 
 rule fastqc:
     input:
@@ -51,11 +43,11 @@ rule fastqc:
         "0.59.2/bio/fastqc"
 
 
-rule multiqc:
+rule multiqc_reads:
     input:
         multi_gen
     output:
-        "qc/multiqc.html"
+        "qc/multiqc/reads.html"
     params:
         ""  # Optional: extra parameters for multiqc.
     log:
@@ -135,8 +127,17 @@ rule bigWig:
     shell:
         """
         bamCoverage \
-        --bam {sorted} \
+        --bam {input.sorted} \
         --outFileName {output} \
         --binSize 1 \
         --outFileFormat bigwig \
         """
+
+rule tar_gz:
+    input:
+        bigWig = "bigwig/",
+        multiqc = "qc/multiqc"
+    output:
+        "chip-seq_{genome}.tar.gz"
+    shell:
+        """tar -czvf {output} {input.bigWig} {input.multiqc} """
