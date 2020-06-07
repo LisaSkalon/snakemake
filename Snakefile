@@ -1,9 +1,9 @@
 import pandas as pd
 
+# config file with genome name
 configfile: "config.yaml"
 
-#ruleorder: bowtie2 > multiqc_bams
-
+# data_table.tsv with samples info
 SAMPLES_INFO = pd.read_csv("./data_table.tsv", sep = '\t')
 SAMPLES_INFO['Sample'] = SAMPLES_INFO.apply(lambda row: row.GSM+'_'+row.Cell+'_'+row.Target, axis=1)
 SAMPLES_INFO.set_index(['Sample'], inplace=True)
@@ -18,9 +18,6 @@ def log_gen(wildcards):
 
 rule all:
     input:
-        #expand("qc/fastqc/{sample}.html", sample = SAMPLES),
-        #expand("qc/fastqc/{sample}_fastqc.zip", sample = SAMPLES),
-        #expand("logs/fastqc/{sample}.log", sample = SAMPLES),
         "qc/multiqc/reads.html",
         expand('indexes/{genome}/{genome}.fa.gz', genome=GENOME),
         expand("bowtie2-index/{genome}.1.bt2", genome=GENOME),
@@ -37,6 +34,7 @@ rule all:
         expand("bigwig/{sample}_{genome}.bw", sample = SAMPLES, genome = GENOME),
         expand('chip-seq_{genome}.tar.gz', genome = GENOME)
 
+# QC checking
 rule fastqc:
     input:
         lambda wildcards:
@@ -51,7 +49,7 @@ rule fastqc:
     wrapper:
         "0.59.2/bio/fastqc"
 
-
+# multiqc report on fastqc data
 rule multiqc_reads:
     input:
         multi_gen
@@ -64,6 +62,7 @@ rule multiqc_reads:
     wrapper:
         "0.59.2/bio/multiqc"
 
+# genome downloading. If you want to use full genome, uncomment line below
 rule wget:
     output:
         'indexes/{genome}/{genome}.fa.gz'
@@ -76,15 +75,7 @@ rule wget:
        """wget http://hgdownload.cse.ucsc.edu/goldenPath/hg19/chromosomes/{wildcards.genome}.fa.gz  \
        -O {output}"""
 
-#rule index_bowtie:
-#    output:
-#        directory('bowtie2-index')
-#    params:
-#        files_list='indexes/{genome}/{genome}.fa.gz'.format(genome=config['genome']),
-#        target='bowtie2-index/{genome}'.format(genome=config['genome'])
-#    shell:
-#        """mkdir -p {output} $$ bowtie2-build {params.files_list} {params.target}"""
-
+# genome indexing
 rule index_bowtie:
     input:
         rules.wget.output
@@ -101,6 +92,7 @@ rule index_bowtie:
         basename="bowtie2-index/{genome}"
     shell: "bowtie2-build {input} {params.basename}"
 
+# aligning
 rule bowtie2:
    input:
         sample=
@@ -118,30 +110,19 @@ rule bowtie2:
    wrapper:
        "0.60.0/bio/bowtie2/align"
 
-# rule bowtie2:
-#     input:
-#         lambda wildcards:
-#            expand("reads/{files}", files = SAMPLES_INFO.loc[wildcards.sample, 'File'], sample=SAMPLES)
-#     output:
-#         "bams/{sample}_{genome}.bam"
-#     params:
-#        index=rules.index_bowtie.params.basename
-#     shell:
-#         "bowtie2 -x {params.index} -p 4 -U {input} -S {output}"
-
-
+# multiqc report on aligned data
 rule multiqc_bams:
    input:
        log_gen
    output:
-         dir="qc/multiqc",
-         name="bams.html"
+         dir="qc/multiqc/bams.html"
   # !!! environment: environment.yaml : you don`t need specific conda env for this rule,
   # !!! just the one already mentioned
    priority: 10
    shell:
-       """multiqc --force -o {output.dir} -n {output.name} {input}"""
+       """multiqc --force -n {output.dir} {input}"""
 
+# sorting alignments
 rule samtools_sort:
     input:
          "bams/{sample}_{genome}.bam"
@@ -155,6 +136,7 @@ rule samtools_sort:
     wrapper:
         "0.60.0/bio/samtools/sort"
 
+# indexing alignments
 rule samtools_index:
     input:
         "bams/sorted/{sample}_{genome}.sorted.bam"
@@ -166,6 +148,7 @@ rule samtools_index:
     wrapper:
         "0.60.0/bio/samtools/index"
 
+# creating files with coverage info
 rule bigWig:
     input:
         sorted = "bams/sorted/{sample}_{genome}.sorted.bam",
@@ -182,12 +165,13 @@ rule bigWig:
         --outFileFormat bigwig \
         """
 
-# rule tar_gz:
-#     input:
-#         bigWig = rules.bigWig.output,
-#         multiqc_reads = rules.multiqc_bams.output.dir
-#         multiqc_bams = rules.multiqc_bams.output
-#     output:
-#         "chip-seq_{genome}.tar.gz"
-#     shell:
-#         """tar -czvf {output} {input.multiqc_reads} {input.bigWig} """
+# creating tar.gz archive
+rule tar_gz:
+    input:
+        bigWig = expand("bigwig/{sample}_{genome}.bw", sample=SAMPLES, genome=GENOME),
+        multiqc_reads = rules.multiqc_bams.output,
+        multiqc_bams = rules.multiqc_bams.output
+    output:
+        "chip-seq_{genome}.tar.gz"
+    shell:
+        """tar -czvf {output} {input.multiqc_reads} {input.multiqc_bams} {input.bigWig} """
